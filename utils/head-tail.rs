@@ -67,16 +67,14 @@ impl HeadTail {
             }
         } else {
             let mut buffer = VecDeque::with_capacity(self.count);
-            for line in reader.lines() {
-                if let Ok(line) = line {
-                    if self.skip_empty && line.is_empty() {
-                        continue;
-                    }
-                    if self.count == buffer.len() {
-                        buffer.pop_front();
-                    };
-                    buffer.push_back(line)
+            for line in reader.lines().flatten() {
+                if self.skip_empty && line.is_empty() {
+                    continue;
                 }
+                if self.count == buffer.len() {
+                    buffer.pop_front();
+                };
+                buffer.push_back(line)
             }
             for line in buffer {
                 if let Err(e) = writeln!(self.outfile, "{}", line) {
@@ -136,23 +134,21 @@ impl HeadTail {
                     "-a" | "--add-mode" | "--add" => add_mode = true,
                     _ => return Err(HeadTailError::UnexpectedArg(args[i].clone())),
                 }
+            } else if input_name.is_none() {
+                input_name = Some(&args[i])
+            } else if outfile_name.is_none() {
+                outfile_name = Some(&args[i])
             } else {
-                if input_name.is_none() {
-                    input_name = Some(&args[i])
-                } else if outfile_name.is_none() {
-                    outfile_name = Some(&args[i])
-                } else {
-                    count = match args[i].parse::<usize>() {
-                        Ok(num) => num,
-                        Err(_) => return Err(HeadTailError::ParseError(args[i].clone())),
-                    }
+                count = match args[i].parse::<usize>() {
+                    Ok(num) => num,
+                    Err(_) => return Err(HeadTailError::ParseError(args[i].clone())),
                 }
             }
             i += 1;
         }
         Ok(Self {
-            mode: mode,
-            count: count,
+            mode,
+            count,
             skip_empty: skip,
             outfile: Self::read_out_file(outfile_name, add_mode)?,
             inputfile: Self::read_in_file(input_name)?,
@@ -208,10 +204,7 @@ fn main() {
         return;
     }
     match HeadTail::new(args) {
-        Ok(o) => match o.run() {
-            Err(e) => eprintln!("Head-Tail run error: {}", e),
-            _ => {}
-        },
+        Ok(o) => if let Err(e) = o.run() { eprintln!("Head-Tail run error: {}", e) },
         Err(e) => eprintln!("Head-Tail error: {}", e),
     }
 }
