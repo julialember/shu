@@ -5,10 +5,11 @@ edition = "2024"
 
 [dependencies]
 
-[[bin]]
-name="grep"
-path="utils/grep.rs"
+[lib]
+name="cmd"
+path="utils/cmd/mod.rs"
 
 [[bin]]
-name="head"
-path="utils/head-tail.rs"
+name="terminal"
+path="utils/terminal.rs"
+
