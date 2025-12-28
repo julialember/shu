@@ -53,7 +53,7 @@ fn new(args: Vec<&'a str>) -> Result<Box<dyn Command<'a, CatError> + 'a>, Comman
                             return Err(CommandError::NoArgument(args[i]));
                         } else {
                             i += 1;
-                            input_files.push(&args[i])
+                            input_files.push(args[i])
                         }
                     }
                     "-he" | "--help" | "--help-mode" => {
@@ -96,15 +96,10 @@ impl<'a> Command<'a, CatError> for Cat<'a> {
                     while stdin().read_line(&mut buffer).expect("can't read line") != 0 {
                         if self.squize_blank && buffer.trim().is_empty() {continue;}
                         else if self.line_number || (self.count_non_empty && !buffer.trim().is_empty()) {
-                            if let Err(e) = write!(self.outfile, "{}. ", index) {
-                                return Err(CommandError::WriteError(e));
-                            }
+                            write!(self.outfile, "{}. ", index)?;
                             index+=1;
                         }
-                        if let Err(e) = 
-                            writeln!(self.outfile, "{}{}", buffer.trim(), if self.show_end {"$"} else {""}) {
-                                    return Err(CommandError::WriteError(e))
-                                }
+                            writeln!(self.outfile, "{}{}", buffer.trim(), if self.show_end {"$"} else {""})?;
                             buffer.clear();
                         }
                 }
@@ -115,21 +110,14 @@ impl<'a> Command<'a, CatError> for Cat<'a> {
                             for line in buffer.lines().flatten() {
                                 if self.squize_blank && line.trim().is_empty() {continue;}
                                 else if self.line_number || (self.count_non_empty && !line.is_empty()) {
-                                    if let Err(e) = write!(self.outfile, "{}. ", index) {
-                                        return Err(CommandError::WriteError(e));
-                                    }
+                                    write!(self.outfile, "{}. ", index)?;
                                     index+=1;
                                 }
-                                if let Err(e) = 
-                                    writeln!(self.outfile, "{}{}", line, if self.show_end {"$"} else {""}) {
-                                    return Err(CommandError::WriteError(e))
-                                }
+                                writeln!(self.outfile, "{}{}", line, if self.show_end {"$"} else {""})?;
                             } 
                         },
-                        Err(e) => if let Err(e) =
-                            writeln!(self.outfile, "shu: error with file ({}): {}", file, e) {
-                            return Err(CommandError::WriteError(e));
-                        }
+                        Err(e) =>
+                            writeln!(self.outfile, "shu: error with file ({}): {}", file, e)?,
                     }   
                 }
             }
@@ -170,7 +158,7 @@ fn help() {
 #[derive(Debug)]
 pub enum CatError{}
 
-impl std::fmt::Display for CatError {
+impl fmt::Display for CatError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "") 
     }

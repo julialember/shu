@@ -13,7 +13,7 @@ pub enum HeadTailError<'a> {
 
 use super::command::{Command, CommandBuild, CommandError};
 
-impl std::fmt::Display for HeadTailError<'_> {
+impl fmt::Display for HeadTailError<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::ParseError(s) => writeln!(f, "can't parse argument: {}", s)
@@ -39,9 +39,7 @@ impl<'a> Command<'a, HeadTailError<'a>> for HeadTail {
                 .filter(|l| !(self.skip_empty && l.is_empty()))
                 .take(self.count)
             {
-                if let Err(e) = self.outfile.write_all(format!("{}\n", line).as_bytes()) {
-                    return Err(CommandError::WriteError(e));
-                };
+                self.outfile.write_all(format!("{}\n", line).as_bytes())?;
             }
         } else {
             let mut buffer = VecDeque::with_capacity(self.count);
@@ -54,10 +52,8 @@ impl<'a> Command<'a, HeadTailError<'a>> for HeadTail {
                 };
                 buffer.push_back(line)
             }
-            for line in buffer {
-                if let Err(e) = self.outfile.write_all(format!("{}\n", line).as_bytes()) {
-                    return Err(CommandError::WriteError(e));
-                }
+            for line in buffer.iter() {
+                self.outfile.write_all(format!("{}\n", line).as_bytes())?;
             }
         }
         Ok(())

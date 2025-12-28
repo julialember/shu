@@ -1,6 +1,6 @@
 use std::fmt;
-mod command;
 
+mod command;
 mod grep;
 mod cat;
 mod head_tail;

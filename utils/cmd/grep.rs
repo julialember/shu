@@ -60,7 +60,7 @@ fn new(args: Vec<&'a str>) -> Result<Box<dyn Command<'a, GrepError> + 'a>, Comma
                             return Err(CommandError::NoArgument(args[i]));
                         } else {
                             i += 1;
-                            pattern = Some(&args[i])
+                            pattern = Some(args[i])
                         }
                     }
                     "-c" | "--count" | "--count-lines" => count = true,
@@ -75,12 +75,12 @@ fn new(args: Vec<&'a str>) -> Result<Box<dyn Command<'a, GrepError> + 'a>, Comma
                 }
             }
             else if pattern.is_none() {
-                pattern = Some(&args[i]);
+                pattern = Some(args[i]);
             } 
             else if input_name.is_none() {
-                input_name = Some(&args[i])
+                input_name = Some(args[i])
             }             else {
-                outfile_name = Some(&args[i])
+                outfile_name = Some(args[i])
             } 
             i += 1;
         }
@@ -107,20 +107,16 @@ impl<'a> Command<'a, GrepError> for Grep {
             Some(input) => {
                 let buffer = BufReader::new(input);
                 if self.count {
-                    match writeln!(self.outfile, "{}",  
+                    writeln!(self.outfile, "{}",  
                         buffer.lines().flatten().filter(|line| 
-                                Self::match_pattern(line, &self.pattern, self.ignore_case)).count()) {
-                            Err(e) => return Err(CommandError::WriteError(e)),
-                            Ok(_) => return Ok(()),
-                        } 
+                                Self::match_pattern(line, &self.pattern, self.ignore_case)).count())?;
+                    return Ok(())
                 } 
                 for (numero, line) in buffer.lines().flatten().enumerate() {
                     if Self::match_pattern(&line, &self.pattern, self.ignore_case){
                         let line = if self.line_number {format!("{}. {}\n", numero, line)} 
                             else {format!("{}\n", line)};
-                        if let Err(e) = self.outfile.write_all(line.as_bytes()) {
-                            return Err(CommandError::WriteError(e));
-                        }
+                        self.outfile.write_all(line.as_bytes())?;
                     }
                 }
             }
@@ -132,18 +128,15 @@ impl<'a> Command<'a, GrepError> for Grep {
                     if num == 0 {break;}  
                     if Self::match_pattern(&buffer, &self.pattern, self.ignore_case){
                         if self.count {line_count+=1} 
-                        else if let Err(e) = write!(self.outfile, "{}", 
+                        write!(self.outfile, "{}", 
                             if self.line_number {format!("{}{}", line_number, buffer)} 
-                            else { format!("{}", buffer)}) {
-                            return Err(CommandError::WriteError(e))
-                        }
+                            else { format!("{}", buffer)})?;
                     } 
                     line_number+=1;
                     buffer.clear();
                 }
-                if self.count && 
-                    let Err(e) = writeln!(self.outfile, "{}", line_count) {
-                        return Err(CommandError::WriteError(e)) 
+                if self.count {
+                    writeln!(self.outfile, "{}", line_count)?;
                 }
             }
         }
@@ -183,7 +176,7 @@ pub enum GrepError {
     NoPattern,
 }
 
-impl std::fmt::Display for GrepError {
+impl fmt::Display for GrepError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NoPattern => writeln!(f, "no pattern"),

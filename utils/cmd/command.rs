@@ -20,6 +20,12 @@ pub enum CommandError<'a, E> {
     Other(&'a str, E),
 }
 
+impl<'a, E> From<io::Error> for CommandError<'a, E> {
+    fn from(value: io::Error) -> Self {
+        Self::WriteError(value) 
+    }
+}
+
 impl<'a, E: fmt::Display> fmt::Display for CommandError<'a, E>{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
