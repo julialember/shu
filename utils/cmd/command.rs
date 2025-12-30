@@ -25,7 +25,7 @@ impl<'a> CommandBackPack<'a> {
     fn read_out_file(
         path: PathBuf,
         add_mode: bool,
-    ) -> Result<Box<dyn Write + 'a >, BuildError<'a>> {
+    ) -> Result<Box<dyn Write + 'a>, BuildError<'a>> {
             match OpenOptions::new()
                 .append(add_mode)
                 .write(true)
@@ -65,7 +65,7 @@ impl<'a> CommandBackPack<'a> {
                     i+=1;
                     err_add_mode = true;
                 }
-                "-err" | "--stderr" | "2>" => {
+                "--err" | "--stderr" | "2>" | "--error" => {
                     stderr_name = Some(Self::get_next(&args, i)?);
                     i+=1;
                 }
@@ -109,12 +109,13 @@ pub enum CommandError<'a, E> {
     Other(&'a str, E),
 }
 
-impl<'a, E> From<io::Error> for CommandError<'a, E> {
+impl<E> From<io::Error> for CommandError<'_, E> {
     fn from(value: io::Error) -> Self {
         Self::WriteError(value) 
     }
 }
-impl<'a> fmt::Display for BuildError<'a> {
+
+impl fmt::Display for BuildError<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::UnexpectedArg(s) => writeln!(f, "shu: unexpected arg: {}", s),
@@ -124,7 +125,7 @@ impl<'a> fmt::Display for BuildError<'a> {
     }
 }
 
-impl<'a, E: fmt::Display> fmt::Display for CommandError<'a, E>{
+impl<E: fmt::Display> fmt::Display for CommandError<'_, E>{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::WriteError(s) => write!(f, "shu: error with write into file: {}", s),

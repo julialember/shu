@@ -31,7 +31,7 @@ fn run<'a, E, B>(vec: Vec<&'a str>, path: PathBuf) -> bool
         Ok(command) => 
             match command.run(&mut str) {
                 Err(e) => {
-                    if let Err(e) = writeln!(str.stdout, "{}", e) {
+                    if let Err(e) = writeln!(str.stderr, "{}", e) {
                         println!("error with write in stderr, so here the error: {}", e);
                     }
                     false
