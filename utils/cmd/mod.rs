@@ -27,7 +27,6 @@ fn run<'a, E, B>(vec: Vec<&'a str>, path: PathBuf) -> bool
             return false;
         }
     };
-    println!("{:?}", args);
     match B::new_obj(args, path) {
         Ok(command) => 
             match command.run(&mut str) {

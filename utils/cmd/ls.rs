@@ -1,5 +1,9 @@
 use std::{
-    fmt, fs::{self, DirEntry}, io::{self, Write}, os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt}, path::{Path, PathBuf}
+    fmt, 
+    fs::{self, DirEntry}, 
+    io::{self, Write}, 
+    os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt}, 
+    path::{Path, PathBuf}
 };
 
 use super::command::{

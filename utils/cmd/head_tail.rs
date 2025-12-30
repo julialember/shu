@@ -1,7 +1,8 @@
 use std::{
     collections::VecDeque,
     fmt,
-    io::{self, BufRead, BufReader, Read, Write}, path::PathBuf,
+    io::{self, BufRead, BufReader, Read, Write}, 
+    path::PathBuf,
 };
 
 
@@ -77,9 +78,6 @@ impl<'a> Command<'a, HeadTailError<'a>> for HeadTail<'a> {
         println!("  -s, --skip-empty, --skip  skip empty lines");
         println!("  -f, --from, -i, --input-file FILE");
         println!("                            read from FILE instead of stdin");
-        println!("  -o, --output, --to, --outfile FILE");
-        println!("                            write to FILE instead of stdout");
-        println!("  -a, --add, --add-mode     append to FILE instead of overwriting (with -o)");
         println!("  -he, --help, --help-mode  display this help and exit");
         println!();
         println!("EXAMPLES:");

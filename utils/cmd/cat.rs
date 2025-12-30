@@ -151,9 +151,6 @@ impl<'a> Command<'a, CatError> for Cat {
         println!("  -E, --show-ends           display $ at end of each line");
         println!("  -s, --squeeze-blank       suppress repeated empty output lines");
         println!("  -f, --from, --input-file  specify input file (can be used multiple times)");
-        println!("  -o, --output, --to FILE   write to FILE instead of stdout");
-        println!("   >>                       append to FILE instead of stdout");
-        println!("  -a, --add-mode,           did not truncate the output file ");
         println!("  -he, --help               display this help and exit");
         println!();
         println!("EXAMPLES:");
