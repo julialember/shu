@@ -1,5 +1,5 @@
 [package]
-name = "utils"
+name = "shu"
 version = "0.1.0"
 edition = "2024"
 
@@ -7,9 +7,10 @@ edition = "2024"
 
 [lib]
 name="cmd"
-path="utils/cmd/mod.rs"
+path="src/cmd/mod.rs"
+
 
 [[bin]]
 name="terminal"
-path="utils/terminal.rs"
+path="src/terminal.rs"
 
