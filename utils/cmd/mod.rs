@@ -1,4 +1,4 @@
-use std::{fmt, path::PathBuf};
+use std::{fmt, path::{Path, PathBuf}};
 
 mod command;
 mod ls;
@@ -12,22 +12,25 @@ use head_tail::{HeadTail, HeadTailError};
 use ls::{Ls, LsError};
     
 use command::{
-    CommandBuild, CommandBackPack};
+    CommandBuild, CommandBackPack
+};
 
-fn run<'a, E, B>(vec: Vec<&'a str>, path: PathBuf) -> bool 
+fn run<'a, E, B>(vec: Vec<&'a str>, path: &'a Path, pipe_mode: bool) -> bool 
     where 
         B: CommandBuild<'a, E>,
         E: fmt::Display,
 {
-    let (mut str, args) = 
-            match CommandBackPack::new(vec, &path) {
-        Ok(args) => args,
+    let (mut str, args, pipe_part) = 
+            match CommandBackPack::new(vec, path) {
+        Ok(args) => {
+            args
+        },
         Err(e) => {
             eprintln!("{}", e);
             return false;
         }
     };
-    match B::new_obj(args, path) {
+    match B::new_obj(args, path, pipe_mode) {
         Ok(command) => 
             match command.run(&mut str) {
                 Err(e) => {
@@ -36,7 +39,13 @@ fn run<'a, E, B>(vec: Vec<&'a str>, path: PathBuf) -> bool
                     }
                     false
                 }
-                Ok(code) => code
+                Ok(code) => {
+                    match pipe_part {
+                        Some(args) => set(args, path, true),
+                        None => code
+                    }
+                }
+
             }
         Err(e) => {
             if let Err(e) = writeln!(str.stderr, "{}", e) {
@@ -47,14 +56,12 @@ fn run<'a, E, B>(vec: Vec<&'a str>, path: PathBuf) -> bool
     }
 }
 
-#[allow(unused)]
-pub fn todo(command: &str, path: PathBuf) -> bool {
-    let vec: Vec<&str> = split_args(command);
+pub fn set(vec: Vec<&str>, path: &Path, pipe_mode: bool) -> bool {
     match vec[0] {
-        "grep" => run::<'_, GrepError, Grep>(vec, path),
-        "cat" =>  run::<'_, CatError, Cat>(vec, path),
-        "head-tail" => run::<'_, HeadTailError, HeadTail>(vec, path),
-        "ls" => run::<'_, LsError, Ls>(vec, path),
+        "grep" => run::<'_, GrepError, Grep>(vec, path, pipe_mode),
+        "cat" =>  run::<'_, CatError, Cat>(vec, path, pipe_mode),
+        "head-tail" => run::<'_, HeadTailError, HeadTail>(vec, path, pipe_mode),
+        "ls" => run::<'_, LsError, Ls>(vec, path, pipe_mode),
         _=> {
             eprintln!("shu: unknown command: {}", vec[0]);
             false
@@ -63,7 +70,12 @@ pub fn todo(command: &str, path: PathBuf) -> bool {
     }
 }
 
-fn split_args<'a>(command: &'a str) -> Vec<&'a str> {
+pub fn todo(command: &str, path: PathBuf) -> bool {
+    let vec: Vec<&str> = split_args(command);
+    set(vec, &path,false) 
+}
+
+fn split_args(command: &str) -> Vec<&str> {
     let mut vec = Vec::new();
     let mut start_arg = 0;
     let mut end_arg = 0;

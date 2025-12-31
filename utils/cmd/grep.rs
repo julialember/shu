@@ -1,40 +1,44 @@
 use std::{
     fmt, 
-    io::{BufRead, BufReader, Write, stdin}, 
-    path::PathBuf
+    io::{self, BufRead, BufReader, Read, Write}, 
+    path::Path
 };
 
 
 
 use super::command::{
     Command, CommandError, CommandBuild, CommandBackPack,
-    BuildError
+    BuildError, InputFile, 
 };
 
-pub struct Grep {
+pub struct Grep<'a> {
     pattern: String,
-    inputfile: Vec<Option<PathBuf>>,
+    input_files: Vec<InputFile<'a>>,
     count: bool,
     ignore_case: bool,
     line_number: bool,
 }
 
-impl<'a> CommandBuild<'a, GrepError> for Grep {
-fn new_obj(args: Vec<&'a str>, path: PathBuf) -> Result<Box<dyn Command<'a, GrepError> + 'a>, CommandError<'a, GrepError>> {
+impl<'a> CommandBuild<'a, GrepError> for Grep<'a> {
+fn new_obj(args: Vec<&'a str>, path: &'a Path, pipe_mode: bool) 
+        -> Result<Box<dyn Command<'a, GrepError> + 'a>, CommandError<'a, GrepError>> {
         let mut i = 0;
         let mut pattern: Option<&str> = None;
-        let mut input_names: Vec<Option<PathBuf>> = Vec::new();
+        let mut input_files: Vec<InputFile> = Vec::new();
+        if pipe_mode {
+            input_files.push(InputFile::Pipe);
+        }
         let mut ignore_case = false;
         let mut line_number = false;
         let mut count = false;
         while i < args.len() {
             if args[i].starts_with('-') || args[i].starts_with('>') {
                 match args[i].trim() {
-                    "-" => input_names.push(None),
+                    "-" => input_files.push(InputFile::Stdin),
                     "-in" | "--input-file" | "-f" | "--from" => {
                         match CommandBackPack::get_next(&args, i) {
                             Ok(res) => {
-                                input_names.push(Some(path.join(res)));
+                                input_files.push(InputFile::File(path, res));
                                 i+=1;
                             }
                             Err(e) => return Err(CommandError::BuildError(e))
@@ -63,7 +67,7 @@ fn new_obj(args: Vec<&'a str>, path: PathBuf) -> Result<Box<dyn Command<'a, Grep
                 pattern = Some(args[i]);
             } 
             else {
-                input_names.push(Some(path.join(args[i])))
+                input_files.push(InputFile::File(path, args[i]))
             }           
             i += 1;
         }
@@ -74,61 +78,61 @@ fn new_obj(args: Vec<&'a str>, path: PathBuf) -> Result<Box<dyn Command<'a, Grep
                 pattern: pattern.to_owned(),
                 line_number,
                 ignore_case,
-                inputfile: input_names,
+                input_files,
             }
         ))}
     }
 }
 
-impl<'a> Command<'a, GrepError> for Grep {
-    fn run(mut self: Box<Self>, output: &mut CommandBackPack) -> Result<bool, CommandError<'a, GrepError>> {
-        if self.ignore_case {
-            self.pattern = self.pattern.to_lowercase()
+impl<'a> Grep<'a> {
+    fn match_pattern(line: &str, pattern: &str, ignore_case: bool) -> bool {
+        if ignore_case {
+            line.to_lowercase().contains(pattern) 
+        } else {
+            line.contains(pattern)
         }
-        for file in self.inputfile {
-            match file {
-                Some(input) => {
-                    let buffer 
-                        = match CommandBackPack::read_in_file(input) {
-                            Ok(read) => BufReader::new(read),
-                            Err(e) => return Err(CommandError::BuildError(e))
-                        };
-                    if self.count {
-                        writeln!(output.stdout, "{}",  
-                            buffer.lines().map_while(Result::ok).filter(|line| 
-                                    Self::match_pattern(line, &self.pattern, self.ignore_case)).count())?;
-                        return Ok(true)
-                    } 
-                    for (numero, line) in buffer.lines().map_while(Result::ok).enumerate() {
-                        if Self::match_pattern(&line, &self.pattern, self.ignore_case){
-                            let line = if self.line_number {format!("{}. {}\n", numero+1, line)} 
-                                else {format!("{}\n", line)};
-                            output.stdout.write_all(line.as_bytes())?;
-                        }
-                    }
-                }
-                None => {
-                    let mut buffer = String::new();
-                    let mut line_number = 1;
-                    let mut line_count = 0;
-                    while let Ok(num) = stdin().read_line(&mut buffer) {
-                        if num == 0 {break;}  
-                        if Self::match_pattern(&buffer, &self.pattern, self.ignore_case){
-                            if self.count {line_count+=1} 
-                            write!(output.stdout, "{}", 
-                                if self.line_number {format!("{}{}", line_number, buffer)} 
-                                else { buffer.to_string() })?;
-                        } 
-                        line_number+=1;
-                        buffer.clear();
-                    }
-                    if self.count {
-                        writeln!(output.stdout, "{}", line_count)?;
-                    }
+    }
+    fn print_out(
+        &self, 
+        output: &mut CommandBackPack, 
+        file: Box<dyn Read+'a>) -> io::Result<()> {
+        let buffer = BufReader::new(file);
+        if self.count {
+            writeln!(output.stdout, "{}",  
+                buffer.lines().map_while(Result::ok).filter(|line| 
+                        Self::match_pattern(line, &self.pattern, self.ignore_case)).count())?;
+        } 
+        else {
+            for (numero, line) in buffer.lines().map_while(Result::ok).enumerate() {
+            if Self::match_pattern(&line, &self.pattern, self.ignore_case){
+                let line = if self.line_number {format!("{}. {}\n", numero+1, line)} 
+                    else {format!("{}\n", line)};
+                output.stdout.write_all(line.as_bytes())?;
                 }
             }
         }
-        Ok(true)
+        Ok(())
+    } 
+}
+
+impl<'a> Command<'a, GrepError> for Grep<'a> {
+    fn run(mut self: Box<Self>, output: &mut CommandBackPack) -> Result<bool, CommandError<'a, GrepError>> {
+        let mut exit_code = true;
+        if self.ignore_case {
+            self.pattern = self.pattern.to_lowercase()
+        }
+        for file in self.input_files.iter() {
+            let file = match Self::input_type(file) {
+                Ok(file) => file,
+                Err(e) => {
+                    exit_code = false;
+                    write!(output.stderr, "{}", e)?;
+                    continue;
+                }
+            };
+            Self::print_out(&self, output, file)?;
+        }
+        Ok(exit_code)
     } 
 fn help() {
     println!("Search for PATTERN in each FILE or standard input.");
@@ -167,13 +171,5 @@ impl fmt::Display for GrepError {
     }
 }
 
-impl Grep {
-    fn match_pattern(line: &str, pattern: &str, ignore_case: bool) -> bool {
-        if ignore_case {
-            line.to_lowercase().contains(pattern) 
-        } else {
-            line.contains(pattern)
-        }
-    }
-}
+
 

@@ -20,7 +20,7 @@ pub struct Ls {
 }
 
 impl<'a> CommandBuild<'a, LsError> for Ls {
-fn new_obj(args: Vec<&'a str>, path: PathBuf) -> Result<Box<dyn Command<'a, LsError> + 'a>, CommandError<'a, LsError>> {
+fn new_obj(args: Vec<&'a str>, path: &'a Path, _p:bool) -> Result<Box<dyn Command<'a, LsError> + 'a>, CommandError<'a, LsError>> {
         let mut i = 0;
         let mut dir: Option<PathBuf> = None;
         let mut show_hide = false;
@@ -51,7 +51,7 @@ fn new_obj(args: Vec<&'a str>, path: PathBuf) -> Result<Box<dyn Command<'a, LsEr
                 show_hide_and,
                 full_info,
                 classify,
-                dire: if let Some(dir) = dir {dir} else {path},
+                dire: if let Some(dir) = dir {dir} else {path.join(".")},
             }
         ))
     }
@@ -59,7 +59,8 @@ fn new_obj(args: Vec<&'a str>, path: PathBuf) -> Result<Box<dyn Command<'a, LsEr
 
 
 impl<'a> Command<'a, LsError> for Ls {
-    fn run(mut self: Box<Self>, output: &mut CommandBackPack) -> Result<bool, CommandError<'a, LsError>> {
+    fn run(mut self: Box<Self>, output: &mut CommandBackPack) 
+            -> Result<bool, CommandError<'a, LsError>> {
         if self.show_hide && !self.show_hide_and{
             if self.full_info {
                 Self::print_info(".".into(), &mut output.stdout)?;

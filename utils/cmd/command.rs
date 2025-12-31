@@ -1,13 +1,29 @@
 use std::{
     fmt, 
     fs::{File, OpenOptions}, 
-    io::{self, Write}, 
+    io::{self, Read, Write}, 
     path::{Path, PathBuf}
 };
 
 pub trait Command<'a, E> {
     fn help() -> () where Self: Sized;
-    fn run(self: Box<Self>, output: &mut CommandBackPack<'a>) -> Result<bool, CommandError<'a, E>>;
+    fn run(self: Box<Self>, output: &mut CommandBackPack<'a>) 
+        -> Result<bool, CommandError<'a, E>>;
+    fn input_type(file: &InputFile<'a>) -> Result<Box<dyn Read + 'a>, CommandError<'a, E>> 
+        where Self: Sized  {
+        match file {
+            InputFile::Pipe => match io::pipe() {
+                Ok((pipe_read, _)) => Ok(Box::new(pipe_read)),
+                Err(e) => Err(CommandError::BuildError(BuildError::PipeError(e)))
+            }
+            InputFile::Stdin => Ok(Box::new(io::stdin())), 
+            InputFile::File(path, filename) =>
+                match CommandBackPack::read_in_file(path, filename) {
+                    Ok(file) => Ok(Box::new(file)),
+                    Err(e) => Err(CommandError::BuildError(e)),
+            }
+        }
+    }
 }
 
 pub struct CommandBackPack<'a> {
@@ -15,17 +31,27 @@ pub struct CommandBackPack<'a> {
     pub stderr: Box<dyn Write + 'a>,
 }
 
+pub enum InputFile<'a> {
+    Stdin, 
+    Pipe,
+    File(&'a Path, &'a str),
+}
+
+
 impl<'a> CommandBackPack<'a> {
-    pub fn read_in_file(filename: PathBuf) -> Result<File, BuildError<'a>> {
-        match File::open(&filename) {
+    pub fn read_in_file(path: &Path, filename: &'a str) -> Result<File, BuildError<'a>> {
+        let path = path.join(filename);
+        match File::open(&path) {
             Ok(file) => Ok(file),
-            Err(e) => Err(BuildError::UnopenedFile(filename ,e))
+            Err(e) => Err(BuildError::UnopenedFile(path ,e))
         }
     }
     fn read_out_file(
-        path: PathBuf,
+        path: &Path,
+        filename: &'a str,
         add_mode: bool,
     ) -> Result<Box<dyn Write + 'a>, BuildError<'a>> {
+        let path = path.join(filename);
             match OpenOptions::new()
                 .append(add_mode)
                 .write(true)
@@ -47,11 +73,12 @@ impl<'a> CommandBackPack<'a> {
     }
 
     pub fn new(args: Vec<&'a str>, path: &Path) 
-            -> Result<(Self, Vec<&'a str>), BuildError<'a>>{
+            -> Result<(Self, Vec<&'a str>, Option<Vec<&'a str>>), BuildError<'a>>{
         let mut args_left = Vec::new();
         let mut i: usize = 1;
         let mut stdout_name = None;
         let mut stderr_name = None;
+        let mut pipe_args = None;
         let mut add_mode = false;
         let mut err_add_mode = false;
         while args.len() > i {
@@ -63,7 +90,13 @@ impl<'a> CommandBackPack<'a> {
                 ">>" => {
                     stdout_name = Some(Self::get_next(&args, i)?);
                     i+=1;
-                    err_add_mode = true;
+                    add_mode = true;
+                }
+                "|" | "--pipe" | "--pipe-mode" => {
+                    if i+1 < args.len() {
+                        pipe_args = Some(Vec::from(&args[i+1..]));
+                        break;
+                    } 
                 }
                 "--err" | "--stderr" | "2>" | "--error" => {
                     stderr_name = Some(Self::get_next(&args, i)?);
@@ -72,7 +105,7 @@ impl<'a> CommandBackPack<'a> {
                 "2>>" => {
                     stderr_name = Some(Self::get_next(&args, i)?);
                     i+=1;
-                    add_mode=true;
+                    err_add_mode=true;
                 }
                 "-add" | "--add-mode" => add_mode = true,
                 _=> args_left.push(args[i])
@@ -81,17 +114,24 @@ impl<'a> CommandBackPack<'a> {
         } 
         Ok((Self {
             stderr: if let Some(name) = stderr_name {
-                Box::new(Self::read_out_file(path.join(name), err_add_mode)?)
+                Box::new(Self::read_out_file(path, name, err_add_mode)?)
             } else {Box::new(io::stderr())},
-            stdout: if let Some(name) = stdout_name {
-                Box::new(Self::read_out_file(path.join(name), add_mode)?) 
+            stdout: if pipe_args.is_some() {
+                match io::pipe() {
+                    Ok((_, pipe_wr)) => Box::new(pipe_wr),
+                    Err(e) => return Err(BuildError::PipeError(e))
+                } 
+            }
+            else if let Some(name) = stdout_name {
+                Box::new(Self::read_out_file(path, name, add_mode)?) 
             } else {Box::new(io::stdout())}
-        }, args_left))
+        }, args_left, pipe_args))
     }
 }
 
 pub trait CommandBuild<'a, E> {
-    fn new_obj(args: Vec<&'a str>, path: PathBuf) -> Result<Box<dyn Command<'a, E> + 'a>, CommandError<'a, E>>;
+    fn new_obj(args: Vec<&'a str>, path: &'a Path, pipe_mode: bool) 
+        -> Result<Box<dyn Command<'a, E> + 'a>, CommandError<'a, E>>;
 }
 
 #[derive(Debug)]
@@ -99,6 +139,7 @@ pub enum BuildError<'a> {
     UnexpectedArg(&'a str),
     NoArgument(&'a str),
     UnopenedFile(PathBuf, io::Error),
+    PipeError(io::Error),
 }
 
 #[derive(Debug)]
@@ -118,6 +159,7 @@ impl<E> From<io::Error> for CommandError<'_, E> {
 impl fmt::Display for BuildError<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::PipeError(e) => writeln!(f, "shu: error with build pipe command: {}", e),
             Self::UnexpectedArg(s) => writeln!(f, "shu: unexpected arg: {}", s),
             Self::UnopenedFile(n, s) => writeln!(f, "shu: can't open the file ({}): {}", n.display(), s),
             Self::NoArgument(s) => writeln!(f, "shu: no argument after: {}", s),

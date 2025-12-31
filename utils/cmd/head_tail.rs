@@ -1,8 +1,8 @@
 use std::{
     collections::VecDeque,
     fmt,
-    io::{self, BufRead, BufReader, Read, Write}, 
-    path::PathBuf,
+    io::{BufRead, BufReader, Write}, 
+    path::Path,
 };
 
 
@@ -11,9 +11,10 @@ pub enum HeadTailError<'a> {
     ParseError(&'a str),
 }
 
+
 use super::command::{
     Command, CommandBuild, CommandError, CommandBackPack,
-    BuildError,
+    BuildError, InputFile
 };
 
 impl fmt::Display for HeadTailError<'_> {
@@ -28,38 +29,48 @@ pub struct HeadTail<'a> {
     mode: bool,
     skip_empty: bool,
     count: usize,
-    inputfile: Box<dyn Read + 'a>,
+    input_files: Vec<InputFile<'a>> 
 }
 
 impl<'a> Command<'a, HeadTailError<'a>> for HeadTail<'a> {
     fn run(self: Box<Self>, output: &mut CommandBackPack) 
             -> Result<bool, CommandError<'a, HeadTailError<'a>>> {
-        let reader = BufReader::new(self.inputfile);
-        if self.mode {
-            for line in reader
-                .lines()
-                .map_while(Result::ok) 
-                .filter(|l| !(self.skip_empty && l.is_empty()))
-                .take(self.count)
-            {
-                output.stdout.write_all(format!("{}\n", line).as_bytes())?;
-            }
-        } else {
-            let mut buffer = VecDeque::with_capacity(self.count);
-            for line in reader.lines().map_while(Result::ok) {
-                if self.skip_empty && line.is_empty() {
+        let mut exit_code = false;
+        for file in self.input_files.iter() {
+            let reader = match Self::input_type(file) {
+                Ok(file) => BufReader::new(file),
+                Err(e) => {
+                    exit_code = false;
+                    write!(output.stderr, "{}", e)?;
                     continue;
                 }
-                if self.count == buffer.len() {
-                    buffer.pop_front();
-                };
-                buffer.push_back(line)
-            }
-            for line in buffer.iter() {
-                output.stdout.write_all(format!("{}\n", line).as_bytes())?;
+            };
+            if self.mode {
+                for line in reader
+                    .lines()
+                    .map_while(Result::ok) 
+                    .filter(|l| !(self.skip_empty && l.is_empty()))
+                    .take(self.count)
+                {
+                    output.stdout.write_all(format!("{}\n", line).as_bytes())?;
+                }
+            } else {
+                let mut buffer = VecDeque::with_capacity(self.count);
+                for line in reader.lines().map_while(Result::ok) {
+                    if self.skip_empty && line.is_empty() {
+                        continue;
+                    }
+                    if self.count == buffer.len() {
+                        buffer.pop_front();
+                    };
+                    buffer.push_back(line)
+                }
+                for line in buffer.iter() {
+                    output.stdout.write_all(format!("{}\n", line).as_bytes())?;
+                }
             }
         }
-        Ok(true)
+        Ok(exit_code)
     }
     
     fn help() {
@@ -89,22 +100,26 @@ impl<'a> Command<'a, HeadTailError<'a>> for HeadTail<'a> {
 }
 
 impl<'a> CommandBuild<'a, HeadTailError<'a>> for HeadTail<'a>  {
-fn new_obj(args: Vec<&'a str>, path: PathBuf) -> Result<Box<dyn Command<'a, HeadTailError<'a>> + 'a>, CommandError<'a, HeadTailError<'a>>> {
+fn new_obj(args: Vec<&'a str>, path: &'a Path, pipe_mode: bool) -> 
+    Result<Box<dyn Command<'a, HeadTailError<'a>> + 'a>, CommandError<'a, HeadTailError<'a>>> {
         let mut i = 0;
         let mut mode: bool = true;
-        let mut input_name: Option<&str> = None;
-        let mut skip = false;
+        let mut input_files = Vec::new();
+        if pipe_mode {
+            input_files.push(InputFile::Pipe);
+        }
+        let mut skip_empty = false;
         let mut count = 10;
         while i < args.len() {
             if args[i].starts_with('-') || args[i].starts_with('>') {
                 match args[i].trim() {
-                    "-" => input_name = None,
+                    "-" => input_files.push(InputFile::Stdin),
                     "-i" | "--input-file" | "-f" | "--from" => {
                         if i + 1 >= args.len() {
                             return Err(CommandError::BuildError(BuildError::NoArgument(args[i])));
                         } else {
                             i += 1;
-                            input_name = Some(args[i])
+                            input_files.push(InputFile::File(path, args[i]));
                         }
                     }
                     "-c" | "--count" | "--count-lines" => {
@@ -117,31 +132,23 @@ fn new_obj(args: Vec<&'a str>, path: PathBuf) -> Result<Box<dyn Command<'a, Head
                     }
                     "-t" | "--tail-mode" => mode = false,
                     "-h" | "--head-mode" => mode = true,
-                    "-s" | "--skip-empty" | "--skip" => skip = true,
+                    "-s" | "--skip-empty" | "--skip" => skip_empty = true,
                     "-he" | "--help" | "--help-mode" => {
                         Self::help();
                         return Err(CommandError::Help);
                     }
                     _ => return Err(CommandError::BuildError(BuildError::UnexpectedArg(args[i]))),
                 }
-            } else if input_name.is_none() {
-                input_name = Some(args[i])
             } else {
-                count = Self::parse_arg(args[i])?;
+                input_files.push(InputFile::File(path, args[i]))
             }
             i += 1;
         }
         Ok(Box::new(Self {
             mode,
             count,
-            skip_empty: skip,
-            inputfile: match input_name {
-                Some(input_name) => match CommandBackPack::read_in_file(path.join(input_name)) {
-                    Ok(file) => Box::new(file),
-                    Err(e) => return Err(CommandError::BuildError(e)),
-                }
-                None => Box::new(io::stdin()),
-            }
+            skip_empty,
+            input_files,
         }))
  
     }
