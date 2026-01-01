@@ -16,6 +16,12 @@ pub enum InputFile<'a> {
     File(&'a Path, &'a str),
 }
 
+pub struct ParseExit<'a> {
+    pub commandbp: CommandBackPack<'a>,
+    pub args_left: Vec<&'a str>,
+    pub pipe_part: (Option<PipeReader>, Option<Vec<&'a str>>),
+}
+
 impl<'a> CommandBackPack<'a> {
     pub fn read_in_file(path: &Path, filename: &'a str) -> Result<File, BuildError<'a>> {
         let path = path.join(filename);
@@ -51,17 +57,7 @@ impl<'a> CommandBackPack<'a> {
         }
     }
 
-    pub fn new(
-        args: Vec<&'a str>,
-        path: &Path,
-    ) -> Result<
-        (
-            Self,
-            Vec<&'a str>,
-            (Option<PipeReader>, Option<Vec<&'a str>>),
-        ),
-        BuildError<'a>,
-    > {
+    pub fn parser(args: Vec<&'a str>, path: &Path) -> Result<ParseExit<'a>, BuildError<'a>> {
         let mut args_left = Vec::new();
         let mut i: usize = 1;
         let mut stdout_name = None;
@@ -100,8 +96,8 @@ impl<'a> CommandBackPack<'a> {
             }
             i += 1;
         }
-        Ok((
-            Self {
+        Ok(ParseExit {
+            commandbp: Self {
                 stderr: if let Some(name) = stderr_name {
                     Box::new(Self::read_out_file(path, name, err_add_mode)?)
                 } else {
@@ -123,7 +119,7 @@ impl<'a> CommandBackPack<'a> {
             },
             args_left,
             pipe_part,
-        ))
+        })
     }
 }
 

@@ -19,8 +19,8 @@ where
     B: CommandBuild<'a, E>,
     E: fmt::Display,
 {
-    let (mut str, args, (pipe_next, pipe_args)) = match CommandBackPack::new(vec, path) {
-        Ok(args) => args,
+    let (mut str, args, (pipe_next, pipe_args)) = match CommandBackPack::parser(vec, path) {
+        Ok(args) => (args.commandbp, args.args_left, args.pipe_part),
         Err(e) => {
             eprintln!("{}", e);
             return false;
