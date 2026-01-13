@@ -7,7 +7,7 @@ pub use build::{
 };
 
 use split::{
-    SplitArgs, SplitError
+    split
 };
 
 use filter::{

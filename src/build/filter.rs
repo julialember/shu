@@ -7,14 +7,14 @@ use crate::build::{
 };
 
 
-pub struct FilterArgs<'a> {
-    args_left: Vec<&'a str>,
-    outfile: Box<dyn io::Write + 'a>,
-    errfile: Box<dyn io::Write + 'a>
+pub struct FilterArgs {
+    args_left: Vec<String>,
+    outfile: Box<dyn io::Write>,
+    errfile: Box<dyn io::Write>
 }
 
-impl<'a> FilterArgs<'a> {
-     pub fn filter(args: Vec<&'a str>) -> Result<FilterArgs<'a>, BuildError<'a>> {
+impl<'a> FilterArgs {
+     pub fn filter(args: Vec<String>) -> Result<FilterArgs, BuildError> {
         let mut args = args.into_iter();
 
         let mut args_left = vec![];
@@ -22,12 +22,12 @@ impl<'a> FilterArgs<'a> {
         let mut errfile = None;
 
         while let Some(arg) = args.next() {
-            match arg.as_ref() {
+            match arg.as_str() {
                 ">>" => outfile = Some(Self::next_write(&mut args, arg,true)?),
                 ">" => outfile = Some(Self::next_write(&mut args, arg, false)?),
                 "2>" => errfile = Some(Self::next_write(&mut args, arg, false)?),
                 "2>>" => errfile = Some(Self::next_write(&mut args, arg, true)?),
-                unknown => args_left.push(unknown),
+                _ => args_left.push(arg),
             }
         } 
         Ok(Self {
@@ -44,8 +44,8 @@ impl<'a> FilterArgs<'a> {
 
     }
  
-    fn next_write(args: &mut impl Iterator<Item = &'a str>, last: &'a str, add_mode: bool)
-            -> Result<Box<dyn io::Write+'a>, BuildError<'a>>{
+    fn next_write(args: &mut impl Iterator<Item = String>, last: String, add_mode: bool)
+            -> Result<Box<dyn io::Write>, BuildError>{
         if let Some(arg) = args.next() {
             let file = Self::write_source(arg, add_mode)?;
             Ok(file)
@@ -55,13 +55,13 @@ impl<'a> FilterArgs<'a> {
         }
     }
     
-    fn write_source(filename: &'a str, add_mode: bool) 
-            -> Result<Box<dyn io::Write + 'a>, BuildError<'a>> {
+    fn write_source(filename: String, add_mode: bool) 
+            -> Result<Box<dyn io::Write>, BuildError> {
         match OpenOptions::new()
             .create(true)
             .append(add_mode) 
             .write(true)
-            .open(filename) {
+            .open(&filename) {
 
             Ok(file) => Ok(Box::new(file)),
             Err(e) => Err(BuildError::OpenError(filename, e))

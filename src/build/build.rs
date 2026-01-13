@@ -2,20 +2,24 @@ use std::{
     fmt, 
     io,
 };
-use crate::build::{SplitError, SplitArgs, FilterArgs};
+use crate::build::{ split::split, FilterArgs};
 
-pub enum BuildError<'a> {
-    OpenError(&'a str, io::Error),
-    SplitError(SplitError),
-    UnExpectedArg(&'a str),    
-    NoArgument(&'a str),
-    Other(&'a str, Box<dyn fmt::Display + 'a>),
+pub fn build<'a>(command: &'a str) -> Result<(), BuildError>{
+    let args = split(command);
+    let filtered = FilterArgs::filter(args)?;
+    Ok(())
 }
 
-impl fmt::Display for BuildError<'_> {
+pub enum BuildError {
+    OpenError(String, io::Error),
+    UnExpectedArg(String),    
+    NoArgument(String),
+    Other(String, Box<dyn fmt::Display>),
+}
+
+impl fmt::Display for BuildError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::SplitError(e) => write!(f, "error with args split: {}", e),
             Self::NoArgument(arg) => write!(f, "no argument agter: {}", arg),
             Self::OpenError(name, e) => write!(f, "error with read({}): {}", name, e),
             Self::UnExpectedArg(arg) => write!(f, "unknown argument: {}", arg),
@@ -24,21 +28,8 @@ impl fmt::Display for BuildError<'_> {
     }
 }
 
-struct Build<'a> {
-    filtered: FilterArgs<'a>,
-}
-
-impl<'a> Build<'a> {
-    fn build(command: &'a str) -> Result<Build<'a>, BuildError<'a>>{
-        let args = SplitArgs::split(command)?.rebuild();
-        let filtered = FilterArgs::filter(args)?;
-        Ok(Build{filtered})
-        
-    } 
-}
-
 pub trait CommandBuild {
-    fn new(args: Vec<&str>) -> Result<Self, BuildError<'_>>
+    fn new(args: Vec<String>) -> Result<Self, BuildError>
         where 
             Self: Sized;
 }
