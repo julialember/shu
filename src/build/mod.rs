@@ -1,16 +1,17 @@
 pub mod build;
+mod filter;
 mod split;
 
 pub use build::{
-    Build, BuildError
+    BuildError
 };
 
 use split::{
     SplitArgs, SplitError
 };
 
-impl From<SplitError> for BuildError<'_> {
-    fn from(value: SplitError) -> Self {
-        BuildError::SplitError(value) 
-    }
-}
+use filter::{
+    FilterArgs
+};
+
+
